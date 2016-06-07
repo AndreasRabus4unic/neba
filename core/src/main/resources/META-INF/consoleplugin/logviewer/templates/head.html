@@ -102,6 +102,11 @@ form .buttonGroup button {
     padding: 0.5em;
     border-left: .2em solid #B23B26;
 }
+
+#tail > div > b {
+    color: darkorange;
+    font-weight: bold;
+}
 </style>
 
 <div id="neba-heading">
@@ -127,5 +132,7 @@ form .buttonGroup button {
         </span>
         <button id="followButton" title="Automatically scroll to the bottom of the logfile">Follow</button>
         <button id="focusOnErrors" title="Only show detected errors">Focus on <span id="numberOfDetectedErrors"></span> error(s)</button>
+        <label for="logMatch">Find:</label>
+        <input id="logMatch" value="" length=12 type="text" title="highlight text matching this regex."/>
     </div>
 </form>

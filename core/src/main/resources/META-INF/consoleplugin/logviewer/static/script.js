@@ -27,7 +27,8 @@ $(function () {
         $hideRotated = $("#hideRotated"),
         $downloadButton = $("#downloadButton"),
         $focusOnErrorsButton = $("#focusOnErrors"),
-        $focusOnErrorsCount = $("#numberOfDetectedErrors");
+        $focusOnErrorsCount = $("#numberOfDetectedErrors"),
+        $logMatch = $("#logMatch");
 
     /**
      * Represents the Tail views (tail and error focused) and the
@@ -98,7 +99,7 @@ $(function () {
         notifyNewErrorListeners: function () {
             var section = this.errorSection;
             this.newErrorListeners.forEach(function (listener) {
-                listener(section)
+                listener(section);
             });
         },
 
@@ -150,9 +151,17 @@ $(function () {
             }
 
             var lines = (this.buffer + text).split('\n');
-
+            logMatch = $logMatch.val();
+            var re = null;
+            try {
+                re = new RegExp(logMatch, "gi");
+            } catch(e) {
+                re = null;
+            }
+            var replfunc = function(str) {return '<b>'+str+'</b>'} ;
 
             for (var i = 0; i < lines.length - 1; ++i) {
+                var line = lines[i];
                 /**
                  * Convert each line of text into a new text DOM node. This non-normalized approach
                  * (many small text nodes instead of one large text node) has many advantages: It significantly increases performance
@@ -161,14 +170,18 @@ $(function () {
                  *
                  * @type {Text}
                  */
-                var textNode = document.createTextNode(lines[i] + '\n');
+                var textNode = document.createElement('div');
+                if (re !== null) {
+                    textNode.innerHTML = line.replace(re, replfunc, 'gi');
+                } else {
+                    textNode.innerHTML = line;
+                }
 
-
-                if (this.logType === Tail.LogType.ERROR || this.logType == undefined) {
+                if (this.logType === Tail.LogType.ERROR || this.logType === undefined) {
 
                     // An error statement was detected before and is not yet finished
                     if (this.errorSection) {
-                        var firstChar = textNode.nodeValue.charAt(0);
+                        var firstChar = line.charAt(0);
                         // The first character is a tab or not a number -> consider it part of a stack trace.
                         if (firstChar === '\t' || (firstChar * 0) !== 0) {
                             // Add the node to the existing error section
@@ -182,7 +195,7 @@ $(function () {
                     }
 
                     // An error is detected.
-                    if (textNode.nodeValue.indexOf("*ERROR*") !== -1) {
+                    if (line.indexOf("*ERROR*") !== -1) {
                         this.logType = Tail.LogType.ERROR;
                         // Create a new div that will hold all elements of the logged error, including stack traces
                         this.errorSection = document.createElement("div");
@@ -199,17 +212,17 @@ $(function () {
                     }
                 }
 
-                if (this.logType === Tail.LogType.REQUEST || this.logType == undefined) {
-                    var match = requestStartPattern().exec(textNode.nodeValue);
-                    if (match != null) {
+                if (this.logType === Tail.LogType.REQUEST || this.logType === undefined) {
+                    var match = requestStartPattern().exec(line);
+                    if (match !== null) {
                         this.logType = Tail.LogType.REQUEST;
                         var link = linkRequestLog(match);
                         link.setAttribute("href", '#r' + match[2]);
                         continue;
                     }
 
-                    match = requestEndPattern().exec(textNode.nodeValue);
-                    if (match != null) {
+                    match = requestEndPattern().exec(line);
+                    if (match !== null) {
                         this.logType = Tail.LogType.REQUEST;
                         linkRequestLog(match).setAttribute("name", 'r' + match[2]);
                         continue;
@@ -327,7 +340,7 @@ $(function () {
         }
     } catch (e) {
         console && console.log(e);
-        Tail.info("Unable to open server connection: " + e.message)
+        Tail.info("Unable to open server connection: " + e.message);
     }
 
     /**
@@ -359,6 +372,14 @@ $(function () {
             return true;
         });
 
+        $logMatch.keydown(function (event) {
+            if (event.which === KEY_ENTER) {
+                logfileParametersChanged();
+                return false;
+            }
+            return true;
+        });
+
         $hideRotated.change(function () {
             toggleRotatedLogfiles();
             return false;
@@ -367,15 +388,15 @@ $(function () {
         $focusOnErrorsButton.click(function () {
             Tail.toggleErrorFocus() ? activeStyle($focusOnErrorsButton) : inactiveStyle($focusOnErrorsButton);
             return false;
-        })
+        });
     }
 
     function activeStyle($button) {
-        $button.css("background", "palegreen").css("font-weight", "bold")
+        $button.css("background", "palegreen").css("font-weight", "bold");
     }
 
     function inactiveStyle($button) {
-        $button.css("background", "").css("font-weight", "")
+        $button.css("background", "").css("font-weight", "");
     }
 
     /**
@@ -459,6 +480,13 @@ $(function () {
         }
 
         $amount.val(opts.amount);
+        var lm = decodeURI(opts.logMatch)
+        $logMatch.val(lm);
+        try {
+            var re = new RegExp(lm, "gi");
+        } catch(e) {
+            alert("Invalid RegEx pattern given. Will be ignored.");
+        }
 
         // The log was not found in the non-rotated log files - perhaps it is in the rotated files?
         if (!selectLogFile(opts.file) && $hideRotated.is(":checked")) {
@@ -486,6 +514,7 @@ $(function () {
     function logfileParametersChanged() {
         var file = $logfile.val(),
             amount = $amount.val(),
+            logMatch = $logMatch.val(),
             href = document.location.href,
             queryPos = Math.max(href.indexOf("?"), href.indexOf("#")),
             endPos = queryPos === -1 ? href.length : queryPos;
@@ -494,7 +523,7 @@ $(function () {
             return;
         }
 
-        document.location.href = href.substr(0, endPos) + "?file=" + file + '&amount=' + amount;
+        document.location.href = href.substr(0, endPos) + "?file=" + file + '&amount=' + amount + '&logMatch=' + encodeURI(logMatch);
     }
 
     /**
