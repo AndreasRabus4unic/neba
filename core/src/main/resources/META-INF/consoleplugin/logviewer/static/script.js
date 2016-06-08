@@ -25,6 +25,7 @@ $(function () {
         $amount = $("#amount"),
         $followButton = $("#followButton"),
         $hideRotated = $("#hideRotated"),
+        $hideNotMatched = $("#hideNotMatched"),
         $downloadButton = $("#downloadButton"),
         $focusOnErrorsButton = $("#focusOnErrors"),
         $focusOnErrorsCount = $("#numberOfDetectedErrors"),
@@ -59,6 +60,9 @@ $(function () {
          */
         errorFocused: false,
 
+        /** Show only lines matching the given regex */
+        showMatchedLinesOnly: false,
+
         /**
          * The currently open error section, if any.
          */
@@ -82,7 +86,8 @@ $(function () {
         followMode: false,
 
         numberOfErrors: function () {
-            return this.errorSectionNodes.length;
+            // return this.errorSectionNodes.length;
+            return document.getElementById("tail").getElementsByClassName("error").length;
         },
 
         onNewError: function (callback) {
@@ -162,8 +167,9 @@ $(function () {
 
             for (var i = 0; i < lines.length - 1; ++i) {
                 var line = lines[i];
+                var firstChar = line.charAt(0);
                 /**
-                 * Convert each line of text into a new text DOM node. This non-normalized approach
+                 * Convert each line of text into a new DOM node. This non-normalized approach
                  * (many small text nodes instead of one large text node) has many advantages: It significantly increases performance
                  * as it allows the browser to only render the text nodes currently in view and allows to easily take single lines
                  * of text and highlight them, e.g. for highlighting errors.
@@ -173,18 +179,25 @@ $(function () {
                 var textNode = document.createElement('div');
                 if (re !== null) {
                     textNode.innerHTML = line.replace(re, replfunc, 'gi');
+                    if (re.test(line)) {
+                        textNode.classList.add("matched");
+                    }
                 } else {
                     textNode.innerHTML = line;
+                    if ($hideNotMatched.is(":checked")) {
+                        textNode.classList.add('hidden');
+                    }
                 }
 
                 if (this.logType === Tail.LogType.ERROR || this.logType === undefined) {
 
                     // An error statement was detected before and is not yet finished
                     if (this.errorSection) {
-                        var firstChar = line.charAt(0);
                         // The first character is a tab or not a number -> consider it part of a stack trace.
                         if (firstChar === '\t' || (firstChar * 0) !== 0) {
+                            // DEBUG: console.log("inside error block: " + line.substr(0,80));
                             // Add the node to the existing error section
+                            // textNode.classList.add("error");
                             this.errorSection.appendChild(textNode);
                             this.updateErrorFocusedView();
                             this.notifyErrorUpdateListeners();
@@ -195,11 +208,16 @@ $(function () {
                     }
 
                     // An error is detected.
-                    if (line.indexOf("*ERROR*") !== -1) {
+                    if ( (line.indexOf("*ERROR*") !== -1) || (line.indexOf("*WARN*") !== -1) ) {
+                        console.log("error block started: " + line.substr(0,80) );
                         this.logType = Tail.LogType.ERROR;
                         // Create a new div that will hold all elements of the logged error, including stack traces
                         this.errorSection = document.createElement("div");
-                        this.errorSection.className = "error";
+                        if ((line.indexOf("*WARN*") !== -1)) {
+                            this.errorSection.classList.add("warning");
+                        } else {
+                            this.errorSection.classList.add("error");
+                        }
                         this.errorSectionNodes.push(this.errorSection);
 
                         // Add the newly created error section to the log view
@@ -229,7 +247,7 @@ $(function () {
                     }
                 }
 
-                // Simply append the line
+                // Simply append the line,
                 tailDomNode.appendChild(textNode);
             }
 
@@ -262,24 +280,54 @@ $(function () {
         },
 
         /**
+         * Warning: race condition, as querySelectorAll returns a non-live list of nodes.
+         */
+        hideLogLines: function(selector) {
+            var tail = document.getElementById('tail');
+            divs = tail.querySelectorAll(selector);
+            for ( i = 0; i < divs.length; ++i) {
+                divs[i].classList.add('hidden');
+                // divs[i].className += divs[i].className ? ' hidden' : 'hidden';
+            }
+        },
+        unhideLogLines: function() {
+            var tail = document.getElementById('tail');
+            var divs = tail.querySelectorAll('div.hidden');
+            for ( i = 0; i < divs.length; ++i) {
+                divs[i].classList.remove('hidden');
+                // divs[i].removeAttribute("hidden");
+            }
+        },
+        /**
          * Whether to only show errors.
          * @returns {boolean} whether only show errors is on.
          */
         toggleErrorFocus: function () {
-            focusedViewDomNode.innerHTML = "";
-
             this.errorFocused = !this.errorFocused;
+            var tail = document.getElementById('tail');
             if (this.errorFocused) {
-                this.errorSectionNodes.forEach(function (node) {
-                    focusedViewDomNode.appendChild(node.cloneNode(true));
-                });
-                this.follow();
-                focusedViewDomNode.style.zIndex = 1001;
+                divs = tail.querySelectorAll('#tail > div:not(.error)');
+                for ( i = 0; i < divs.length; ++i) {
+                    divs[i].classList.add('hidden');
+                }
             } else {
-                focusedViewDomNode.style.zIndex = -1;
+                this.unhideLogLines();
             }
-
             return this.errorFocused;
+        },
+
+        toggleMatchedFocus: function () {
+            this.showMatchedLinesOnly = !this.showMatchedLinesOnly;
+            var tail = document.getElementById('tail');
+            if (this.showMatchedLinesOnly) {
+                divs = tail.querySelectorAll('#tail > div:not(.matched)');
+                for ( i = 0; i < divs.length; ++i) {
+                    divs[i].classList.add('hidden');
+                }
+            } else {
+                this.unhideLogLines();
+            }
+            return this.showMatchedLinesOnly;
         },
 
         /**
@@ -308,40 +356,8 @@ $(function () {
          */
         view: function () {
             return this.errorFocused ? focusedViewDomNode : tailDomNode;
-        }
+        },
     };
-
-    /**
-     * Show and / or update the error focus button.
-     */
-    Tail.onNewError(function () {
-        if (Tail.numberOfErrors() === 1) {
-            $focusOnErrorsCount.fadeIn();
-        }
-        $focusOnErrorsCount.html(Tail.numberOfErrors());
-        if ($focusOnErrorsButton.inAnimation) {
-            return;
-        }
-        $focusOnErrorsButton.inAnimation = true;
-        $focusOnErrorsButton.effect("highlight", {color: "#883B26"}, 600, function () {
-            $focusOnErrorsButton.inAnimation = false;
-        })
-    });
-
-    adjustViewsToScreenHeight();
-    toggleRotatedLogfiles();
-    restrictCopyAllToLogView();
-
-    try {
-        tailSocket = createSocket();
-        tailSocket.onopen = function () {
-            initUiBehavior();
-            selectLogfileAndAmountFromRequestParameters();
-        }
-    } catch (e) {
-        console && console.log(e);
-        Tail.info("Unable to open server connection: " + e.message);
-    }
 
     /**
      * Binds the log viewer behavior to the UI elements (such as buttons) once
@@ -389,6 +405,10 @@ $(function () {
             Tail.toggleErrorFocus() ? activeStyle($focusOnErrorsButton) : inactiveStyle($focusOnErrorsButton);
             return false;
         });
+
+        $hideNotMatched.click(function () {
+            return Tail.toggleMatchedFocus();
+        });
     }
 
     function activeStyle($button) {
@@ -433,7 +453,7 @@ $(function () {
                 }
                 Tail.info(data);
             } else if (console) {
-                console.error("Unsupported data format of websocket response " + data + ".")
+                console.error("Unsupported data format of websocket response " + data + ".");
             }
         };
 
@@ -441,7 +461,7 @@ $(function () {
 
         window.setInterval(function () {
             socket.readyState === WebSocket.OPEN &&
-            socket.send("ping")
+            socket.send("ping");
         }, 1000);
 
         window.onunload = function () {
@@ -480,10 +500,10 @@ $(function () {
         }
 
         $amount.val(opts.amount);
-        var lm = decodeURI(opts.logMatch)
+        var lm = decodeURI(opts.logMatch);
         $logMatch.val(lm);
         try {
-            var re = new RegExp(lm, "gi");
+            new RegExp(lm, "gi");
         } catch(e) {
             alert("Invalid RegEx pattern given. Will be ignored.");
         }
@@ -581,4 +601,39 @@ $(function () {
             }
         });
     }
+
+    // end of functions.
+
+    /**
+     * Show and / or update the error focus button.
+     */
+    Tail.onNewError(function () {
+        if (Tail.numberOfErrors() === 1) {
+            $focusOnErrorsCount.fadeIn();
+        }
+        $focusOnErrorsCount.html(Tail.numberOfErrors());
+        if ($focusOnErrorsButton.inAnimation) {
+            return;
+        }
+        $focusOnErrorsButton.inAnimation = true;
+        $focusOnErrorsButton.effect("highlight", {color: "#883B26"}, 600, function () {
+            $focusOnErrorsButton.inAnimation = false;
+        })
+    });
+
+    adjustViewsToScreenHeight();
+    toggleRotatedLogfiles();
+    restrictCopyAllToLogView();
+
+    try {
+        tailSocket = createSocket();
+        tailSocket.onopen = function () {
+            initUiBehavior();
+            selectLogfileAndAmountFromRequestParameters();
+        }
+    } catch (e) {
+        console && console.log(e);
+        Tail.info("Unable to open server connection: " + e.message);
+    }
+
 });

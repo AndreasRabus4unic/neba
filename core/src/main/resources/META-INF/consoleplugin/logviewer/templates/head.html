@@ -25,10 +25,6 @@
     background-color: white;
 }
 
-.tail div {
-    margin-bottom:2px;
-}
-
 #tail {
     z-index: 1000;
 }
@@ -98,14 +94,31 @@ form .buttonGroup button {
     font-weight: bold;
 }
 
-.error {
-    padding: 0.5em;
-    border-left: .2em solid #B23B26;
-}
-
-#tail > div > b {
+#tail div > b {
     color: darkorange;
     font-weight: bold;
+}
+#tail > div {
+    padding-left: 0.2em;
+    border-left: .2em solid transparent;
+}
+.warning {
+    border-left: .2em solid yellow;
+}
+.error {
+    border-left: .2em solid #B23B26;
+}
+.matched {
+    background-color:  palegreen;
+    border-left: .2em solid darkgreen;
+}
+#tail > div > div > .matched {
+    color: darkred;
+    border-left: none;
+}
+.hidden {
+    background-color:  gray;
+    display: none;
 }
 </style>
 
@@ -134,5 +147,7 @@ form .buttonGroup button {
         <button id="focusOnErrors" title="Only show detected errors">Focus on <span id="numberOfDetectedErrors"></span> error(s)</button>
         <label for="logMatch">Find:</label>
         <input id="logMatch" value="" length=12 type="text" title="highlight text matching this regex."/>
+        <input type="checkbox" name="hideNotMatching" id="hideNotMatched" />
+        <label for="hideNotMatched" title="Hide log line that did not match the given regex"> show only matching entries</label>
     </div>
 </form>
