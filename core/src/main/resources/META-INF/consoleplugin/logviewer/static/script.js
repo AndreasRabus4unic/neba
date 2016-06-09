@@ -113,7 +113,6 @@ $(function () {
          */
         clear: function () {
             tailDomNode.innerHTML = "";
-            focusedViewDomNode.innerHTML = "";
             this.buffer = "";
             this.errorSection = undefined;
             this.errorSectionNodes = [];
@@ -151,7 +150,7 @@ $(function () {
                 return /(.* )\[([0-9]+)]( \-> (GET|POST|PUT|HEAD|DELETE) .*)/g;
             }
 
-            function requestEndPattern() {
+            function requestEndPattern(){
                 return /(.* )\[([0-9]+)]( <\- [0-9]+ .*)/g;
             }
 
@@ -159,7 +158,7 @@ $(function () {
             logMatch = $logMatch.val();
             var re = null;
             try {
-                re = new RegExp(logMatch, "gi");
+                if (logMatch !== null && logMatch.length > 0) re = new RegExp(logMatch, "gi");
             } catch(e) {
                 re = null;
             }
@@ -199,7 +198,6 @@ $(function () {
                             // Add the node to the existing error section
                             // textNode.classList.add("error");
                             this.errorSection.appendChild(textNode);
-                            this.updateErrorFocusedView();
                             this.notifyErrorUpdateListeners();
                             continue;
                         }
@@ -209,7 +207,7 @@ $(function () {
 
                     // An error is detected.
                     if ( (line.indexOf("*ERROR*") !== -1) || (line.indexOf("*WARN*") !== -1) ) {
-                        console.log("error block started: " + line.substr(0,80) );
+                        // DEBUG: console.log("error block started: " + line.substr(0,80) );
                         this.logType = Tail.LogType.ERROR;
                         // Create a new div that will hold all elements of the logged error, including stack traces
                         this.errorSection = document.createElement("div");
@@ -224,7 +222,6 @@ $(function () {
                         tailDomNode.appendChild(this.errorSection);
                         // Add the current text to the newly created error section
                         this.errorSection.appendChild(textNode);
-                        this.addErrorToErrorFocusedView();
                         this.notifyNewErrorListeners();
                         continue;
                     }
@@ -265,8 +262,7 @@ $(function () {
          */
         follow: function () {
             this.followMode &&
-            (tailDomNode.scrollTop = tailDomNode.scrollHeight) &&
-            (focusedViewDomNode.scrollTop = focusedViewDomNode.scrollHeight);
+            (tailDomNode.scrollTop = tailDomNode.scrollHeight);
         },
 
         /**
@@ -283,6 +279,7 @@ $(function () {
          * Warning: race condition, as querySelectorAll returns a non-live list of nodes.
          */
         hideLogLines: function(selector) {
+            if (!selector) selector = '#tail > div.:not(.matched)';
             var tail = document.getElementById('tail');
             divs = tail.querySelectorAll(selector);
             for ( i = 0; i < divs.length; ++i) {
@@ -290,9 +287,10 @@ $(function () {
                 // divs[i].className += divs[i].className ? ' hidden' : 'hidden';
             }
         },
-        unhideLogLines: function() {
+        unhideLogLines: function(selector) {
+            if (!selector) selector = '#tail > div.hidden';
             var tail = document.getElementById('tail');
-            var divs = tail.querySelectorAll('div.hidden');
+            var divs = tail.querySelectorAll(selector);
             for ( i = 0; i < divs.length; ++i) {
                 divs[i].classList.remove('hidden');
                 // divs[i].removeAttribute("hidden");
@@ -304,59 +302,28 @@ $(function () {
          */
         toggleErrorFocus: function () {
             this.errorFocused = !this.errorFocused;
-            var tail = document.getElementById('tail');
             if (this.errorFocused) {
-                divs = tail.querySelectorAll('#tail > div:not(.error)');
-                for ( i = 0; i < divs.length; ++i) {
-                    divs[i].classList.add('hidden');
-                }
+                this.hideLogLines('#tail > div:not(.error)');
             } else {
-                this.unhideLogLines();
+                var selector = '#tail > div.hidden:not(.error)';
+                if (this.showMatchedLinesOnly) {
+                    selector = '#tail > div.hidden:not(.error).matched';
+                }
+                this.unhideLogLines(selector);
             }
             return this.errorFocused;
         },
 
+        // regex matched lines only or not.
         toggleMatchedFocus: function () {
             this.showMatchedLinesOnly = !this.showMatchedLinesOnly;
-            var tail = document.getElementById('tail');
             if (this.showMatchedLinesOnly) {
-                divs = tail.querySelectorAll('#tail > div:not(.matched)');
-                for ( i = 0; i < divs.length; ++i) {
-                    divs[i].classList.add('hidden');
-                }
+                this.hideLogLines('#tail > div:not(.matched):not(.error)');
             } else {
-                this.unhideLogLines();
+                this.unhideLogLines("#tail > div.hidden:not(.error)");
             }
-            return this.showMatchedLinesOnly;
-        },
-
-        /**
-         * Updates the error focused view with a piece of text belonging to the last
-         * error section.
-         */
-        updateErrorFocusedView: function () {
-            if (this.errorFocused) {
-                var oldNode = focusedViewDomNode.childNodes[focusedViewDomNode.childNodes.length - 1];
-                focusedViewDomNode.replaceChild(this.errorSection.cloneNode(true), oldNode);
-            }
-        },
-
-        /**
-         * Updates the error focused view with a new error section.
-         */
-        addErrorToErrorFocusedView: function () {
-            if (this.errorFocused) {
-                focusedViewDomNode.appendChild(this.errorSection.cloneNode(true));
-            }
-        },
-
-        /**
-         * @returns {Element} the DOM node representing the current view on the log data, i.e.
-         *           the tail or focused view node.
-         */
-        view: function () {
-            return this.errorFocused ? focusedViewDomNode : tailDomNode;
-        },
+            // return false;
+        }
     };
 
     /**
@@ -407,7 +374,7 @@ $(function () {
         });
 
         $hideNotMatched.click(function () {
-            return Tail.toggleMatchedFocus();
+            Tail.toggleMatchedFocus();
         });
     }
 
@@ -577,7 +544,6 @@ $(function () {
 
     function adjustViewsToScreenHeight() {
         tailDomNode.style.height = (screen.height * 0.65) + "px";
-        focusedViewDomNode.style.height = tailDomNode.style.height;
     }
 
     function toggleRotatedLogfiles() {
@@ -596,7 +562,6 @@ $(function () {
             if (e.keyCode == KEY_A && e.ctrlKey) {
                 e.preventDefault();
                 var range = document.createRange();
-                range.selectNode(Tail.view());
                 window.getSelection().addRange(range);
             }
         });
