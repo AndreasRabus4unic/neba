@@ -19,7 +19,7 @@ $(function () {
         textDecoder = new TextDecoder("UTF-8"),
         tailSocket,
         tailDomNode = document.getElementById("tail"),
-        focusedViewDomNode = document.getElementById("focusedView"),
+    // focusedViewDomNode = document.getElementById("focusedView"),
         $logfile = $("#logfile"),
         $logfiles = $logfile.children().clone(),
         $amount = $("#amount"),
@@ -84,6 +84,8 @@ $(function () {
         newErrorListeners: [],
 
         followMode: false,
+
+        findRegex: null,
 
         numberOfErrors: function () {
             // return this.errorSectionNodes.length;
@@ -155,13 +157,7 @@ $(function () {
             }
 
             var lines = (this.buffer + text).split('\n');
-            logMatch = $logMatch.val();
-            var re = null;
-            try {
-                if (logMatch !== null && logMatch.length > 0) re = new RegExp(logMatch, "gi");
-            } catch(e) {
-                re = null;
-            }
+            var re = this.findRegex;
             var replfunc = function(str) {return '<b>'+str+'</b>'} ;
 
             for (var i = 0; i < lines.length - 1; ++i) {
@@ -183,9 +179,11 @@ $(function () {
                     }
                 } else {
                     textNode.innerHTML = line;
-                    if ($hideNotMatched.is(":checked")) {
-                        textNode.classList.add('hidden');
-                    }
+                    /*
+                     if ($hideNotMatched.is(":checked")){
+                     textNode.classList.add('hidden');
+                     }
+                     */
                 }
 
                 if (this.logType === Tail.LogType.ERROR || this.logType === undefined) {
@@ -281,19 +279,24 @@ $(function () {
         hideLogLines: function(selector) {
             if (!selector) selector = '#tail > div.:not(.matched)';
             var tail = document.getElementById('tail');
-            divs = tail.querySelectorAll(selector);
+            var divs = tail.querySelectorAll(selector);
             for ( i = 0; i < divs.length; ++i) {
                 divs[i].classList.add('hidden');
                 // divs[i].className += divs[i].className ? ' hidden' : 'hidden';
             }
         },
         unhideLogLines: function(selector) {
+            // Cheat...
+            var wrapFn = function(div) {
+                div.classList.remove('hidden');
+            };
+
             if (!selector) selector = '#tail > div.hidden';
             var tail = document.getElementById('tail');
             var divs = tail.querySelectorAll(selector);
             for ( i = 0; i < divs.length; ++i) {
-                divs[i].classList.remove('hidden');
-                // divs[i].removeAttribute("hidden");
+                setTimeout(wrapFn, 0, divs[i]);
+                // divs[i].classList.remove('hidden');
             }
         },
         /**
@@ -323,8 +326,22 @@ $(function () {
                 this.unhideLogLines("#tail > div.hidden:not(.error)");
             }
             // return false;
+        },
+
+        setFindRegex: function(logMatch) {
+            this.findRegex = null;
+            var result = true;
+            try {
+                if (logMatch !== null && logMatch.length > 0) {
+                    this.findRegex = new RegExp(logMatch, "gi");
+                }
+            } catch(e) {
+                result = false;
+            }
+            return result;
         }
     };
+
 
     /**
      * Binds the log viewer behavior to the UI elements (such as buttons) once
@@ -357,6 +374,11 @@ $(function () {
 
         $logMatch.keydown(function (event) {
             if (event.which === KEY_ENTER) {
+                var logMatch = $logMatch.val();
+                if (false === Tail.setFindRegex(logMatch)) {
+                    alert("Invalid RegEx pattern given. Will be ignored.");
+                    return true;
+                }
                 logfileParametersChanged();
                 return false;
             }
@@ -467,11 +489,10 @@ $(function () {
         }
 
         $amount.val(opts.amount);
+
         var lm = decodeURI(opts.logMatch);
         $logMatch.val(lm);
-        try {
-            new RegExp(lm, "gi");
-        } catch(e) {
+        if (false === Tail.setFindRegex(lm)) {
             alert("Invalid RegEx pattern given. Will be ignored.");
         }
 
@@ -490,7 +511,6 @@ $(function () {
             }
         }
 
-
         tailDomNode.innerHTML = "";
         tailSelectedLogFile();
     }
@@ -506,10 +526,12 @@ $(function () {
             queryPos = Math.max(href.indexOf("?"), href.indexOf("#")),
             endPos = queryPos === -1 ? href.length : queryPos;
 
-        if (!(file && amount)) {
+        // only reload page if necessary
+        if (!(file && amount && logMatch)) {
             return;
         }
 
+        Tail.setFindRegex(logMatch);
         document.location.href = href.substr(0, endPos) + "?file=" + file + '&amount=' + amount + '&logMatch=' + encodeURI(logMatch);
     }
 
